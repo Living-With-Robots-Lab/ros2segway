@@ -59,6 +59,7 @@ class IoEthThread:
         self.rx_queue = rx_queue
         self.max_packet_size = max_packet_size
         self.remote_address = remote_address
+        self.listen_terminate_mutex = None
  
         """
         Initialize the UDP connection
@@ -66,6 +67,8 @@ class IoEthThread:
         try:
             self.conn = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.conn.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            self.conn.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.conn.settimeout(2)
             self.conn.setblocking(0)
             self.conn.bind(('',self.remote_address[1]))
             self.conn.connect(self.remote_address)
@@ -87,6 +90,9 @@ class IoEthThread:
         self.link_up = True
     
     def __del__(self):
+        if self.listen_terminate_mutex == None:
+            return
+
         with self.listen_terminate_mutex, self.transmit_terminate_mutex:
             self.need_to_terminate = True
         

@@ -5,11 +5,13 @@ from rclpy.parameter import Parameter
 from rcl_interfaces.msg import ParameterType, ParameterValue
 from rcl_interfaces.srv import GetParameters, SetParameters, ListParameters
 from geometry_msgs.msg import Twist
+from segway_msgs.msg import ConfigCmd
 from std_msgs.msg import String
 from .system_defines import *
 from .utils import *
 from .io_eth import IoEthThread
 from .io_usb import IoUsbThread
+from .segway_data_classes import RMP_DATA
 import re
 import os
 import select
@@ -27,7 +29,7 @@ params = {
     "accel_limit_mps2": 0.5,
     "decel_limit_mps2": 0.5,
     "dtz_decel_limit_mps2": 1.0,
-    "yaw_rate_limit_rps": 1.0,
+    "yaw_rate_limit_rps": 0.8,
     "yaw_accel_limit_rps2": 1.0,
     "lateral_accel_limit_mps2": 4.905,
     "tire_rolling_diameter_m": 0.46228,
@@ -53,10 +55,10 @@ command_ids = {
     "GENERAL_PURPOSE_CMD_RESET_PARAMS_TO_DEFAULT": 5
 }
 
-class SegwayDriver(Node):
+class SegwayHardwareInterface(Node):
 
     def __init__(self):
-        super().__init__('segway_driver')
+        super().__init__('segway_hardware_interface')
 
         # Variables to track communication frequency for debugging
         self.summer = 0
@@ -67,7 +69,7 @@ class SegwayDriver(Node):
         self.flush_rcvd_data = True
         self.update_base_local_planner = False
         self.last_move_base_update = self.get_clock().now().to_msg().sec
-        self.rmp_init = True
+        self.terminate_mutex = None
 
         interface = self.declare_parameter("interface", "eth")
 
@@ -83,7 +85,7 @@ class SegwayDriver(Node):
             self.platform = "RMP_440"
 
         # Initialize the publishers for RMP
-        #self.rmp_data = RMP_DATA()
+        self.rmp_data = RMP_DATA(self)
 
         # Initialize faultlog related items
         self.is_init = True
@@ -104,10 +106,8 @@ class SegwayDriver(Node):
 
         if not self.comm.link_up:
             self.get_logger().error("Could not open socket for RMP...")
-            self.comm.close()
+            self.comm.Close()
             return
-
-        self.create_subscription(Twist, "/cmd_vel", self._add_motion_command_to_queue, 10)
 
         # Start the receive handler thread
         self.terminate_mutex = threading.RLock()
@@ -144,21 +144,24 @@ class SegwayDriver(Node):
 
         self.start_frequency_samp = True
 
+        time.sleep(1)
+
         # Indicate the driver is up with motor audio
         cmds = [GENERAL_PURPOSE_CMD_ID, [GENERAL_PURPOSE_CMD_SET_AUDIO_COMMAND, MOTOR_AUDIO_PLAY_EXIT_ALARM_SONG]]
         self._add_command_to_queue(cmds)
 
-        time.sleep(1)
-
-        # Set mode from STANDBY to TRACTOR
-        cmds = [GENERAL_PURPOSE_CMD_ID, [GENERAL_PURPOSE_CMD_SET_OPERATIONAL_MODE, TRACTOR_REQUEST]]
-        self._add_command_to_queue(cmds)
+        self.create_subscription(Twist, "segway/cmd_vel", self._add_motion_command_to_queue, 10)
+        self.create_subscription(ConfigCmd, "segway/gp_command", self._send_command, 10)
 
         self.get_logger().info("Segway Driver is up and running")
         
 
     def __del__(self):
         self.get_logger().error("Segway Driver has called the __del__ method, terminating")
+
+        if self.terminate_mutex == None:
+            return
+
         with self.terminate_mutex:
             self.need_to_terminate = True
 
@@ -179,9 +182,13 @@ class SegwayDriver(Node):
                 except:
                     self.get_logger().debug("Select did not return interface data")
 
-        self.comm.close()
+        self.comm.Close()
         self.tx_queue_.close()
         self.rx_queue_.close()
+
+    def _send_command(self, command):
+        cmds = [GENERAL_PURPOSE_CMD_ID, [command_ids[command.gp_cmd], command.gp_param]]
+        self._add_command_to_queue(cmds)
 
     def _add_command_to_queue(self, command):
         cmd_bytes = generate_cmd_bytes(command)
@@ -207,26 +214,25 @@ class SegwayDriver(Node):
         if self.extracting_faultlog:
             if len(rsp_data) == NUMBER_OF_FAULTLOG_WORDS:
                 self.extracting_faultlog = False
-                #TODO: Publish faultlog
+                #TODO: Parse and publish faultlog
                 self.get_logger().info("Faultlog Recieved")
-        elif len(rsp_data) == NUMBER_OF_RMP_RSP_WORDS:
-            #TODO: parse segway status packet and publish
-            """self.rmp_data.status.parse(rsp_data[START_STATUS_BLOCK:END_STATUS_BLOCK])
-            self.rmp_data.auxiliary_power.parse(rsp_data[START_AUX_POWER_BLOCK:END_AUX_POWER_BLOCK])
-            self.rmp_data.propulsion.parse(rsp_data[START_PROPULSION_POWER_BLOCK:END_PROPULSION_POWER_BLOCK])
-            self.rmp_data.dynamics.parse(rsp_data[START_DYNAMICS_BLOCK:END_DYNAMICS_BLOCK])
-            self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
-            self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])"""
 
-            #flag to indicate we've recieved first response from segway
-            if self.rmp_init:
-                self.rmp_init = False
+        elif len(rsp_data) == NUMBER_OF_RMP_RSP_WORDS:
+            try:
+                self.rmp_data.status.parse(rsp_data[START_STATUS_BLOCK:END_STATUS_BLOCK])
+                self.rmp_data.auxiliary_power.parse(rsp_data[START_AUX_POWER_BLOCK:END_AUX_POWER_BLOCK])
+                self.rmp_data.propulsion.parse(rsp_data[START_PROPULSION_POWER_BLOCK:END_PROPULSION_POWER_BLOCK])
+                self.rmp_data.dynamics.parse(rsp_data[START_DYNAMICS_BLOCK:END_DYNAMICS_BLOCK])
+                self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
+                self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])
+            except Exception as e:
+                print("Error when parsing status: " + e)
 
             self.get_logger().debug("Feedback received from RMP")
 
     def _add_motion_command_to_queue(self, command):
         cmds = [MOTION_CMD_ID, [
-            convert_float_to_u32(-command.linear.x), #positive x values make the base move backward for some reason
+            convert_float_to_u32(command.linear.x),
             convert_float_to_u32(command.linear.y),
             convert_float_to_u32(command.angular.z)
         ]]
@@ -285,10 +291,10 @@ class SegwayDriver(Node):
         
         if start_cont:
             start_time = self.get_clock().now().seconds_nanoseconds()[0]
-            while ((self.get_clock().now().seconds_nanoseconds()[0] - start_time) < 3.0) and (self.rmp_init):
+            while ((self.get_clock().now().seconds_nanoseconds()[0] - start_time) < 3.0) and (self.rmp_data.status.init):
                 self._add_command_to_queue(set_continuous)
                 time.sleep(0.1)
-            ret = not self.rmp_init
+            ret = not self.rmp_data.status.init
         else:
             start_time = self.get_clock().now().seconds_nanoseconds()[0]
             while ((self.get_clock().now().seconds_nanoseconds()[0] - start_time) < 3.0) and not ret:
@@ -296,7 +302,7 @@ class SegwayDriver(Node):
                 if ((self.get_clock().now().seconds_nanoseconds()[0] - self.last_rsp_rcvd) > 0.1):
                     ret = True
                 time.sleep(0.2)
-            self.rmp_init = True
+            self.rmp_data.status.init = True
 
         return ret
     
@@ -311,7 +317,7 @@ class SegwayDriver(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    segway_driver = SegwayDriver()
+    segway_driver = SegwayHardwareInterface()
     executor = MultiThreadedExecutor()
     rclpy.spin(segway_driver, executor)
     segway_driver.__del__()
