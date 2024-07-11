@@ -15,7 +15,7 @@ source install/setup.bash
 ## Usage
 Ensure that the base is on, cables are connected, and ethernet settings are properly configured.
 ```
-ros2 run segway segway_driver
+ros2 launch segway segway_ros.launch.py
 ```
 
 To teleop:
