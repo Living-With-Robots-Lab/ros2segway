@@ -195,11 +195,12 @@ class SegwayHardwareInterface(Node):
         self.tx_queue_.put(cmd_bytes)
 
     def _update_rcv_frq(self):
+        time_seconds = float(self.get_clock().now().nanoseconds) * 1e-9
         if self.start_frequency_samp:
             self.samp += 1
-            self.summer += 1.0 / (self.get_clock().now().to_msg().sec - self.last_rsp_rcvd)
+            self.summer += 1.0 / (time_seconds - self.last_rsp_rcvd)
             self.avg_freq = self.summer / self.samp
-        self.last_rsp_rcvd = self.get_clock().now().to_msg().sec
+        self.last_rsp_rcvd = time_seconds
 
     def _handle_rsp(self, data_bytes):
         self._update_rcv_frq()
@@ -207,6 +208,7 @@ class SegwayHardwareInterface(Node):
            return
         
         valid_data, rsp_data = validate_response(data_bytes)
+
         if not valid_data:
             self.get_logger().error("Bad RMP packet")
             return
@@ -216,17 +218,13 @@ class SegwayHardwareInterface(Node):
                 self.extracting_faultlog = False
                 #TODO: Parse and publish faultlog
                 self.get_logger().info("Faultlog Recieved")
-
         elif len(rsp_data) == NUMBER_OF_RMP_RSP_WORDS:
-            try:
-                self.rmp_data.status.parse(rsp_data[START_STATUS_BLOCK:END_STATUS_BLOCK])
-                self.rmp_data.auxiliary_power.parse(rsp_data[START_AUX_POWER_BLOCK:END_AUX_POWER_BLOCK])
-                self.rmp_data.propulsion.parse(rsp_data[START_PROPULSION_POWER_BLOCK:END_PROPULSION_POWER_BLOCK])
-                self.rmp_data.dynamics.parse(rsp_data[START_DYNAMICS_BLOCK:END_DYNAMICS_BLOCK])
-                self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
-                self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])
-            except Exception as e:
-                print("Error when parsing status: " + e)
+            self.rmp_data.status.parse(rsp_data[START_STATUS_BLOCK:END_STATUS_BLOCK])
+            self.rmp_data.auxiliary_power.parse(rsp_data[START_AUX_POWER_BLOCK:END_AUX_POWER_BLOCK])
+            self.rmp_data.propulsion.parse(rsp_data[START_PROPULSION_POWER_BLOCK:END_PROPULSION_POWER_BLOCK])
+            self.rmp_data.dynamics.parse(rsp_data[START_DYNAMICS_BLOCK:END_DYNAMICS_BLOCK])
+            self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
+            self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])
 
             self.get_logger().debug("Feedback received from RMP")
 
@@ -282,7 +280,6 @@ class SegwayHardwareInterface(Node):
                 [GENERAL_PURPOSE_CMD_SET_TORQUE_LIMIT,
                 convert_float_to_u32(params["torqe_limit"]/100.0)]]
         self._add_command_to_queue(cmd)
-        
 
 
     def _continuous_data(self, start_cont):
@@ -290,16 +287,16 @@ class SegwayHardwareInterface(Node):
         ret = False
         
         if start_cont:
-            start_time = self.get_clock().now().seconds_nanoseconds()[0]
+            start_time = float(self.get_clock().now().nanoseconds) * 1e-9
             while ((self.get_clock().now().seconds_nanoseconds()[0] - start_time) < 3.0) and (self.rmp_data.status.init):
                 self._add_command_to_queue(set_continuous)
                 time.sleep(0.1)
             ret = not self.rmp_data.status.init
         else:
-            start_time = self.get_clock().now().seconds_nanoseconds()[0]
-            while ((self.get_clock().now().seconds_nanoseconds()[0] - start_time) < 3.0) and not ret:
+            start_time = float(self.get_clock().now().nanoseconds) * 1e-9
+            while ((float(self.get_clock().now().nanoseconds) * 1e-9 - start_time) < 3.0) and not ret:
                 self._add_command_to_queue(set_continuous)
-                if ((self.get_clock().now().seconds_nanoseconds()[0] - self.last_rsp_rcvd) > 0.1):
+                if ((float(self.get_clock().now().nanoseconds) * 1e-9 - self.last_rsp_rcvd) > 0.1):
                     ret = True
                 time.sleep(0.2)
             self.rmp_data.status.init = True

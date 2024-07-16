@@ -72,7 +72,7 @@ class Controller(Node):
 
         # Modify position appropriately.
         #msg.pose.pose.position.x *= -1  # reverse x
-        msg.pose.pose.position.y *= -1  # reverse y
+        #msg.pose.pose.position.y *= -1  # reverse y
 
         quaternion = (msg.pose.pose.orientation.x,
                       msg.pose.pose.orientation.y,
@@ -89,6 +89,7 @@ class Controller(Node):
 
         # Modify velocity appropriately.
         msg.twist.twist.linear.x *= -1
+        #self.get_logger().info(str(msg.twist.twist.linear.x))
 
         if self.publish_tf:
             tf_msg = TransformStamped()

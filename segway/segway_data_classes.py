@@ -51,7 +51,7 @@ class RMP_Status:
             has_brakes = (self.platform_identifier & 0x40) >> 6
             has_segway_bsa = (self.platform_identifier & 0x80) >> 7
             self.start_time_machine = rmp_timestamp
-            self.start_time_local = self._node.get_clock().now().to_msg().sec
+            self.start_time_local = float(self._node.get_clock().now().nanoseconds) * 1e-9
             self.init = False
 
             if machine_id in HAS_2_WHEELS:

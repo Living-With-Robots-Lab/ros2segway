@@ -104,7 +104,7 @@ def generate_cmd_bytes(cmd):
 
     return cmd_bytes
     
-def validate_response(rsp):
+def  validate_response(rsp):
     
     """
     Check the CRC and 

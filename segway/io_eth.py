@@ -122,7 +122,6 @@ class IoEthThread:
                 data = result[0][0].recv()
                 msg_bytes = bytes(data)
                 self.conn.send(msg_bytes)
-                # self.conn.send(msg_bitArr)
 
     def Close(self):
         self.__del__()
