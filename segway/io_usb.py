@@ -61,8 +61,9 @@ class IoUsbThread:
         """
         Initialize the UDP connection
         """
-        self.conn = serial.Serial('/dev/ttyACM0',baudrate=115200,timeout=0.1)
+        self.conn = serial.Serial(self.device,baudrate=115200,timeout=0)
 
+        print("Set up")
         self.need_to_terminate = False
         self.listen_terminate_mutex = threading.RLock()
         self.transmit_terminate_mutex = threading.RLock()
@@ -80,15 +81,16 @@ class IoUsbThread:
         assert(self.transmitThread)
         self.listenThread.join()
         self.transmitThread.join()
+
     def listen(self):
         while True:
             with self.listen_terminate_mutex:
                 if self.need_to_terminate:
-                    break
+                    break 
             result = select.select([self.conn],[],[],0.1)
             if (len(result[0])>0):
                 message = result[0][0].read(self.max_packet_size)
-                message_bytes= map(ord, message)
+                message_bytes= list(message)
                 self.rx_queue.put(message_bytes)
             
     def transmit(self):
@@ -99,12 +101,11 @@ class IoUsbThread:
             result = select.select([self.tx_queue._reader],[],[],0.1)
             if (len(result[0])>0):
                 data = result[0][0].recv()
-                message_bytes=[chr(i) for i in data]
-                message_bytes = ''.join(message_bytes)
+                message_bytes=bytes(data)
+                #print(message_bytes)
                 self.conn.write(message_bytes)
 
     def Close(self):
         self.__del__()
         self.conn.close()
         self.link_up = False
-        

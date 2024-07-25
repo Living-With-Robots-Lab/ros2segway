@@ -71,7 +71,7 @@ class SegwayHardwareInterface(Node):
         self.last_move_base_update = self.get_clock().now().to_msg().sec
         self.terminate_mutex = None
 
-        interface = self.declare_parameter("interface", "eth")
+        interface = self.declare_parameter("interface", "usb")
 
         # Ensure a valid platform
         self.platform = self.declare_parameter('platform', "RMP_220").value
@@ -95,14 +95,14 @@ class SegwayHardwareInterface(Node):
         self.param_server_initialized = False
 
         # Create the thread to run RMP communication
-        interface = self.get_parameter('interface').value or 'eth'
+        interface = self.get_parameter('interface').value or 'usb'
         self.tx_queue_ = multiprocessing.Queue()
         self.rx_queue_ = multiprocessing.Queue()
         if interface == 'eth':
             self.comm = IoEthThread(("10.66.171.5", 8080),
                                     self.tx_queue_, self.rx_queue_, max_packet_size=1248)
         elif interface == 'usb':
-            self.comm = IoUsbThread('ttyACM0', self.tx_queue_, self.rx_queue_, max_packet_size=1248)
+            self.comm = IoUsbThread('ttyUSB0', self.tx_queue_, self.rx_queue_, max_packet_size=1248)
 
         if not self.comm.link_up:
             self.get_logger().error("Could not open socket for RMP...")
@@ -180,7 +180,7 @@ class SegwayHardwareInterface(Node):
                     data = result[0][0].recv()
                     self._handle_rsp(data)
                 except:
-                    self.get_logger().debug("Select did not return interface data")
+                    self.get_logger().info("Select did not return interface data")
 
         self.comm.Close()
         self.tx_queue_.close()
@@ -226,7 +226,7 @@ class SegwayHardwareInterface(Node):
             self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
             self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])
 
-            self.get_logger().debug("Feedback received from RMP")
+            self.get_logger().info("Feedback received from RMP")
 
     def _add_motion_command_to_queue(self, command):
         cmds = [MOTION_CMD_ID, [
