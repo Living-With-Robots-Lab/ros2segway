@@ -28,7 +28,7 @@ class Controller(Node):
 
 
         self.odom_frame_id = self.declare_parameter('odom_frame_id', "odom").get_parameter_value().string_value
-        self.robot_frame_id = self.declare_parameter('robot_frame_id', "base_link").get_parameter_value().string_value
+        self.robot_frame_id = self.declare_parameter('robot_frame_id', "base_footprint").get_parameter_value().string_value
         self.publish_tf = self.declare_parameter('publish_tf', True).get_parameter_value().bool_value
 
         self.stop_timer = None
@@ -79,7 +79,7 @@ class Controller(Node):
                       msg.pose.pose.orientation.z,
                       msg.pose.pose.orientation.w)
         euler = euler_from_quaternion(quaternion)
-        quaternion = quaternion_from_euler(euler[0], euler[1], euler[2] + math.pi)
+        quaternion = quaternion_from_euler(euler[0], euler[1], euler[2] - math.pi)
         quat_msg = Quaternion()
         quat_msg.x = quaternion[0]
         quat_msg.y = quaternion[1]
@@ -89,7 +89,6 @@ class Controller(Node):
 
         # Modify velocity appropriately.
         msg.twist.twist.linear.x *= -1
-        #self.get_logger().info(str(msg.twist.twist.linear.x))
 
         if self.publish_tf:
             tf_msg = TransformStamped()
@@ -111,6 +110,7 @@ class Controller(Node):
     def cmd_callback(self, msg):
         self.target_linear_vel = -msg.linear.x
         self.target_angular_vel = msg.angular.z
+
         if self.stop_timer is not None:
             self.stop_timer.cancel()
         self.stop_timer = self.create_timer(0.5, self.timer_callback)
