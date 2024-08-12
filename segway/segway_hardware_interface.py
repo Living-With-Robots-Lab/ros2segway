@@ -71,7 +71,7 @@ class SegwayHardwareInterface(Node):
         self.last_move_base_update = self.get_clock().now().to_msg().sec
         self.terminate_mutex = None
 
-        interface = self.declare_parameter("interface", "usb")
+        interface = self.declare_parameter("interface", "eth")
 
         # Ensure a valid platform
         self.platform = self.declare_parameter('platform', "RMP_220").value
@@ -226,7 +226,7 @@ class SegwayHardwareInterface(Node):
             self.rmp_data.config_param.parse(rsp_data[START_CONFIG_BLOCK:END_CONFIG_BLOCK])
             self.rmp_data.imu.parse_data(rsp_data[START_IMU_BLOCK:END_IMU_BLOCK])
 
-            self.get_logger().info("Feedback received from RMP")
+            self.get_logger().debug("Feedback received from RMP")
 
     def _add_motion_command_to_queue(self, command):
         cmds = [MOTION_CMD_ID, [
