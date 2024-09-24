@@ -7,6 +7,7 @@ ROS2 version of original ROS1 package at https://github.com/utexas-bwi/segway_v3
 ```
 cd catkin_ws/src
 git clone https://github.com/Living-With-Robots-Lab/ros2segway.git
+git clone https://github.com/utexas-bwi/segway_msgs.git
 cd ..
 colcon build
 source install/setup.bash
