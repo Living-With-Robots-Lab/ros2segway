@@ -24,7 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             'segway_hardware_interface = segway.segway_hardware_interface:main',
-            'segway_controller = segway.segway_controller:main'
+            'segway_controller = segway.segway_controller:main',
+            'segway_faultlog_parser = segway.faultlog_parser:main',
         ],
     },
 )

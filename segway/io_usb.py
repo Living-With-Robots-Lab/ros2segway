@@ -63,7 +63,6 @@ class IoUsbThread:
         """
         self.conn = serial.Serial(self.device,baudrate=115200,timeout=0)
 
-        print("Set up")
         self.need_to_terminate = False
         self.listen_terminate_mutex = threading.RLock()
         self.transmit_terminate_mutex = threading.RLock()
@@ -91,6 +90,7 @@ class IoUsbThread:
             if (len(result[0])>0):
                 message = result[0][0].read(self.max_packet_size)
                 message_bytes= list(message)
+                print(message_bytes)
                 self.rx_queue.put(message_bytes)
             
     def transmit(self):
@@ -101,8 +101,9 @@ class IoUsbThread:
             result = select.select([self.tx_queue._reader],[],[],0.1)
             if (len(result[0])>0):
                 data = result[0][0].recv()
+                print("Sending: ",data)
                 message_bytes=bytes(data)
-                #print(message_bytes)
+                print(message_bytes)
                 self.conn.write(message_bytes)
 
     def Close(self):

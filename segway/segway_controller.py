@@ -41,7 +41,7 @@ class Controller(Node):
         self.terminate = False
         self.ready = False
 
-        self.frame_rate = self.declare_parameter('cmd_publish_rate', 20).get_parameter_value().integer_value
+        self.frame_rate = self.declare_parameter('cmd_publish_rate', 5).get_parameter_value().integer_value
 
         # Supplied in m/s^2
         self.linear_pos_accel_limit = self.declare_parameter('linear_pos_accel_limit', 1).get_parameter_value().double_value / self.frame_rate
@@ -130,6 +130,7 @@ class Controller(Node):
 
     def publish_vel(self):
         if rclpy.ok() and not self.terminate:
+
             if not self.ready:
                 return
 
@@ -164,11 +165,13 @@ class Controller(Node):
             twist.angular.z = float(self.angular_vel)
             self.cmd_pub.publish(twist)
         else:
+            self.get_logger().info("ROS not ready")
+
             # Shutdown base and switch to standby
-            cfg_cmd = ConfigCmd()
-            cfg_cmd.gp_cmd = 'GENERAL_PURPOSE_CMD_SET_OPERATIONAL_MODE'
-            cfg_cmd.gp_param = 4  # STANDBY_REQUEST
-            self.cfg_pub.publish(cfg_cmd)
+            #cfg_cmd = ConfigCmd()
+            #cfg_cmd.gp_cmd = 'GENERAL_PURPOSE_CMD_SET_OPERATIONAL_MODE'
+            #cfg_cmd.gp_param = 4  # STANDBY_REQUEST
+            #self.cfg_pub.publish(cfg_cmd)
 
 def main(args=None):
     rclpy.init(args=args)

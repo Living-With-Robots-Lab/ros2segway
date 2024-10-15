@@ -48,14 +48,15 @@ arising out of or based upon:
 
  \Platform: Linux/ROS Indigo
 --------------------------------------------------------------------"""
-from system_defines import *
-from utils          import *
-from crc16 import buffer_crc_is_valid
+from .system_defines import *
+from .utils          import *
+from .crc16 import buffer_crc_is_valid
 import math
 import webbrowser
 import os
 import time
 import array
+
 
 """
 Class for faultlog extraction
@@ -483,5 +484,32 @@ def decode_fsw(fsw_array):
 
     return faults_present    
 
-if __name__ == "__main__":    
-    FAULTLOG_PARSER()
+from segway_msgs.msg import Faultlog
+import rclpy
+from rclpy.node import Node
+
+class FaultlogParserNode(Node):
+    
+        def __init__(self):
+            super().__init__('faultlog_parser')
+            self.faultlog_subscriber = self.create_subscription(Faultlog, 'segway/feedback/faultlog', self.faultlog_callback, 10)
+    
+        def faultlog_callback(self, msg):
+            rclpy.logging.get_logger('faultlog_parser').info('Received faultlog')
+            faultlog_array = msg
+            FaultlogParser(faultlog_array)
+
+
+def main(args=None):
+
+    """
+    Initialize the node
+    """
+    rclpy.init(args=args)
+    faultlog_parser = FaultlogParserNode()
+    rclpy.spin(faultlog_parser)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

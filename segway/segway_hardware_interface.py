@@ -12,6 +12,7 @@ from .utils import *
 from .io_eth import IoEthThread
 from .io_usb import IoUsbThread
 from .segway_data_classes import RMP_DATA
+from segway_msgs.msg import Faultlog
 import re
 import os
 import select
@@ -95,14 +96,14 @@ class SegwayHardwareInterface(Node):
         self.param_server_initialized = False
 
         # Create the thread to run RMP communication
-        interface = self.get_parameter('interface').value or 'usb'
+        interface = self.get_parameter('interface').value or 'eth'
         self.tx_queue_ = multiprocessing.Queue()
         self.rx_queue_ = multiprocessing.Queue()
         if interface == 'eth':
             self.comm = IoEthThread(("10.66.171.5", 8080),
                                     self.tx_queue_, self.rx_queue_, max_packet_size=1248)
         elif interface == 'usb':
-            self.comm = IoUsbThread('ttyUSB0', self.tx_queue_, self.rx_queue_, max_packet_size=1248)
+            self.comm = IoUsbThread('ttyACM0', self.tx_queue_, self.rx_queue_, max_packet_size=1248)
 
         if not self.comm.link_up:
             self.get_logger().error("Could not open socket for RMP...")
@@ -121,6 +122,8 @@ class SegwayHardwareInterface(Node):
             self.get_logger().error("Could not stop RMP communication stream")
             self.__del__()
             return
+        
+        self.faultlog_pub = self.create_publisher(Faultlog, "segway/feedback/faultlog", 10)
 
         # Extract the faultlog at startup
         self.flush_rcvd_data = False
@@ -187,6 +190,7 @@ class SegwayHardwareInterface(Node):
         self.rx_queue_.close()
 
     def _send_command(self, command):
+        self.get_logger().info(f"Received command: {command.gp_cmd}, {command.gp_param}")
         cmds = [GENERAL_PURPOSE_CMD_ID, [command_ids[command.gp_cmd], command.gp_param]]
         self._add_command_to_queue(cmds)
 
@@ -216,8 +220,14 @@ class SegwayHardwareInterface(Node):
         if self.extracting_faultlog:
             if len(rsp_data) == NUMBER_OF_FAULTLOG_WORDS:
                 self.extracting_faultlog = False
-                #TODO: Parse and publish faultlog
-                self.get_logger().info("Faultlog Recieved")
+                try:
+                    faultlog_msg = Faultlog()
+                    faultlog_msg.data = rsp_data
+                    self.faultlog_pub.publish(faultlog_msg)
+                    self.get_logger().info("Faultlog Recieved")
+                except Exception as e:
+                    self.get_logger().error("Could not publish faultlog" + str(e))
+
         elif len(rsp_data) == NUMBER_OF_RMP_RSP_WORDS:
             self.rmp_data.status.parse(rsp_data[START_STATUS_BLOCK:END_STATUS_BLOCK])
             self.rmp_data.auxiliary_power.parse(rsp_data[START_AUX_POWER_BLOCK:END_AUX_POWER_BLOCK])
