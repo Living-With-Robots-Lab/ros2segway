@@ -9,22 +9,22 @@ from segway_msgs.msg import Status, AuxPower, ConfigCmd
 from sensor_msgs.msg import BatteryState
 import tf2_ros
 from tf2_geometry_msgs import TransformStamped
-from tf_transformations import quaternion_from_euler, euler_from_quaternion
+from tf_transformations import quaternion_from_euler, euler_from_quaternion, unit_vector
 
 class Controller(Node):
 
     def __init__(self):
         super().__init__('segway_controller')
 
-        self.cmd_pub = self.create_publisher(Twist, '/segway/cmd_vel', 10)
-        self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
-        self.cfg_pub = self.create_publisher(ConfigCmd, '/segway/gp_command', 10)
-        self.bat_pub = self.create_publisher(BatteryState, '/segway_battery', 10)
+        self.cmd_pub = self.create_publisher(Twist, '/segway/cmd_vel', 1)
+        self.odom_pub = self.create_publisher(Odometry, 'odom', 1)
+        self.cfg_pub = self.create_publisher(ConfigCmd, '/segway/gp_command', 1)
+        self.bat_pub = self.create_publisher(BatteryState, '/segway_battery', 1)
 
-        self.cmd_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_callback, 10)
-        self.odom_sub = self.create_subscription(Odometry, '/segway/feedback/wheel_odometry', self.odom_callback, 10)
-        self.status_sub = self.create_subscription(Status, '/segway/feedback/status', self.status_callback, 10)
-        self.bat_sub = self.create_subscription(AuxPower, '/segway/feedback/aux_power', self.battery_callback, 10)
+        self.cmd_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_callback, 1)
+        self.odom_sub = self.create_subscription(Odometry, '/segway/feedback/wheel_odometry', self.odom_callback, 1)
+        self.status_sub = self.create_subscription(Status, '/segway/feedback/status', self.status_callback, 1)
+        self.bat_sub = self.create_subscription(AuxPower, '/segway/feedback/aux_power', self.battery_callback, 1)
 
 
         self.odom_frame_id = self.declare_parameter('odom_frame_id', "odom").get_parameter_value().string_value
@@ -41,7 +41,7 @@ class Controller(Node):
         self.terminate = False
         self.ready = False
 
-        self.frame_rate = self.declare_parameter('cmd_publish_rate', 5).get_parameter_value().integer_value
+        self.frame_rate = self.declare_parameter('cmd_publish_rate', 10).get_parameter_value().integer_value
 
         # Supplied in m/s^2
         self.linear_pos_accel_limit = self.declare_parameter('linear_pos_accel_limit', 1).get_parameter_value().double_value / self.frame_rate
@@ -80,6 +80,7 @@ class Controller(Node):
                       msg.pose.pose.orientation.w)
         euler = euler_from_quaternion(quaternion)
         quaternion = quaternion_from_euler(euler[0], euler[1], euler[2] - math.pi)
+        quaternion = unit_vector(quaternion)
         quat_msg = Quaternion()
         quat_msg.x = quaternion[0]
         quat_msg.y = quaternion[1]
@@ -173,11 +174,19 @@ class Controller(Node):
             #cfg_cmd.gp_param = 4  # STANDBY_REQUEST
             #self.cfg_pub.publish(cfg_cmd)
 
+    def shutdown(self):
+        self.terminate = True
+        self.get_logger().info('Segway Controller shutting down')
+        self.timer.cancel()
+        self.cmd_pub.publish(Twist())
+
+
 def main(args=None):
     rclpy.init(args=args)
     controller = Controller()
     time.sleep(5) #wait for hardware connection
     rclpy.spin(controller)
+    controller.shutdown()
     controller.destroy_node()
     rclpy.shutdown()
 

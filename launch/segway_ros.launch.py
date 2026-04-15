@@ -19,9 +19,27 @@ def generate_launch_description():
         executable="segway_controller"
     )
 
+    joy_input = Node(
+        package='joy',
+        executable='joy_node',
+        name='joy_node',
+        parameters=[{
+            'device': '/dev/input/js0',
+            'deadzone': 0.1,
+            'autorepeat_rate': 20.0,
+        }]
+    )
+
+    joystick_teleop = Node(
+        package='segway',
+        executable='ps4_teleop'
+    )
+
     return LaunchDescription(
         [
             hardware_interface,
-            controller
+            controller,
+            # joy_input,
+            # joystick_teleop
         ]
     )

@@ -26,6 +26,7 @@ setup(
             'segway_hardware_interface = segway.segway_hardware_interface:main',
             'segway_controller = segway.segway_controller:main',
             'segway_faultlog_parser = segway.faultlog_parser:main',
+            'ps4_teleop = segway.ps4_teleop:main',
         ],
     },
 )
